@@ -1,0 +1,54 @@
+name: Deploy to Tencent COS & CDN
+
+on:
+  push:
+    branches:
+      - release
+    # 如果你还想监控特定分支合并到 release
+    branches-ignore:
+      - '**' # 先忽略所有分支
+  pull_request:
+    branches:
+      - release
+    types: [closed]
+
+jobs:
+  deploy:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Build project
+      run: npm run build
+      
+    - name: Configure Tencent Cloud CLI
+      uses: TencentCloud/tencentcloud-cli-action@v1
+      with:
+        secret-id: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
+        secret-key: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
+        region: ap-guangzhou
+        
+    - name: Upload to COS
+      run: |
+        # 安装 coscli 工具
+        curl -sSL https://github.com/tencentyun/coscli/releases/download/v0.11.0-beta/coscli-linux -o coscli
+        chmod +x coscli
+        
+        # 同步 dist 目录到 COS
+        ./coscli sync ./dist cos://your-bucket-name -r
+        
+    - name: Refresh CDN
+      run: |
+        # 使用腾讯云 CLI 刷新 CDN
+        tccli cdn PurgeUrlsCache --Urls "https://your-cdn-domain.com/*"
